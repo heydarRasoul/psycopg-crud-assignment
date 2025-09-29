@@ -1,5 +1,6 @@
-from flask import flask, jsonify, request
-from db import create_tables
+from flask import Flask, jsonify, request
+from db import create_all_tables
+import psycopg2
 import os
 
 
@@ -7,37 +8,102 @@ database_name = os.environ.get('DATABASE_NAME')
 app_host = os.environ.get('APP_HOST')
 app_port = os.environ.get('APP_PIRT')
 
-conn = psycopg2.connection(f'dbname={database_name}')
+conn = psycopg2.connect(f'dbname={database_name}')
 cursor = conn.cursor()
 
 app = Flask(__name__)
 
-create_tables()
+create_all_tables()
 
 # create============
 
+@app.route('/company', methods=["POST"])
+def add_company ():
+    try:
+        post_data = request.form if request.form else request.get_json()
+
+        company_name = post_data.get('company_name')
+
+        if not company_name:
+            return jsonify({"message": "company_name is required."}), 400
+
+        result = cursor.execute("""
+            SELECT * FROM Companies WHERE company_name = %s
+        """,(company_name,))
+
+        result = cursor.fetchone()
+
+        if result:
+            return jsonify({"message":f"{company_name} is already exists."}),409
+
+        cursor.execute(""" 
+            INSERT INTO Companies (company_name)
+            VALUES (%s)
+        """,(company_name,))
+        conn.commit()
+
+        return jsonify({"messege": f'{company_name} has been added to companies table.'}),201
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": "Company cannot be added.", "error": str(e)}), 500
+
+
+
+@app.route('/category', methods=['POST'])
+def create_category ():
+    try:
+        post_data = request.form if request.form else request.get_json()
+
+        category_name = post_data.get('category_name')
+
+        if not category_name:
+            return jsonify({"message": "Category name is a required field."}),400
+
+        result = cursor.execute(""" 
+            SELECT * FROM Categories WHERE category_name=%s
+        """,(category_name,))
+
+        result = cursor.fetchone()
+
+        if result:
+            return jsonify({"message": f"{category_name} is already exists."}),409
+
+        cursor.execute(""" 
+            INSERT INTO Categories (category_name)
+            VALUES (%s)
+        """,(category_name,))
+        conn.commit()
+
+        return jsonify({"messege": f'{category_name} has been added to categories table.'}),201
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": "Category cannot be added.", "error": str(e)}), 500
+
+
 @app.route('/product', methods=['POST'])
 def add_product ():
-    post_data = request.form if request.form else request.get_json()
-
-    product_name = post_data.get('product_name')
-    company_id = post_data.get('company_id')
-    price = post_data.get('price')
-    description = post_data.get('description')
-    active = post_data.get('active')
-
-    if not product_name:
-        return jsonify({"message": "product_name is a requiered field"}), 400
-
-    result = cursor.execute(""" 
-     SELECT * FROM Products WHERE product_name = %s 
-    """, [product_name])
-    result = cursor.fetchone()
-
-    if result:
-        return jsonify({"message": f"The {product_name} is already exists."}), 400
-
     try:
+        post_data = request.form if request.form else request.get_json()
+
+        product_name = post_data.get('product_name')
+        company_id = post_data.get('company_id')
+        price = post_data.get('price')
+        description = post_data.get('description')
+        active = post_data.get('active')
+
+        if not product_name:
+            return jsonify({"message": "product_name is a requiered field"}), 400
+
+        result = cursor.execute(""" 
+        SELECT * FROM Products WHERE product_name = %s 
+        """, (product_name,))
+        result = cursor.fetchone()
+
+        if result:
+            return jsonify({"message": f"The {product_name} is already exists."}), 409
+
 
         cursor.execute(""" 
             INSERT INTO Products (product_name, company_id, price, description, active)
@@ -45,118 +111,61 @@ def add_product ():
         """,(product_name, company_id, price, description, active) )
         conn.commit()
 
-    except:
-        cursor.rollback()
-        return jsonify ({"message": "Product could not be added."}),400
+        return ({"messege": f'{product_name} has been added to products table.'}), 201
 
-    return ({"messege": f'{product_name} has been added to products table.'}), 201
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": "Product could not be added.", "error": str(e)}), 500
 
-
-@app.route('/company', methods=["POST"])
-def add_company ():
-    post_data = request.form if request.form else request.get_json()
-
-    company_name = post_data.get('company_name')
-
-    if not company_name:
-        return jsonify({"message": "coompany_name is required."})
-
-    result = cursor.execute("""
-        SELECT * FROM Companies WHERE company_name = %s
-     """,[company_name])
-
-    result = cursor.fetchone()
-
-    if result:
-        return jsonify({"message":f"{Company_name} is already exists."})
-
-    try:
-        cursor.execute(""" 
-            INSERT INTO Companies (company_name)
-            VALUES (%s)
-        """,(company_name) )
-        conn.commit()
-
-    except:
-        cursor.rollback()
-        return jsonify({"message":"Company can not be added."})
-
-    return jsonify({"messege": f'{company_name} has been added to companies table.'}),201
 
 
 @app.route('/warranty', methods=['POST'])
 def create_warranty ():
-    post_data = request.form if request.form else request.get_json()
-
-    warranty_months = post_data.get('warranty_months')
-    product_id = post_data.get('product_id')
-
-    if not product_months:
-        return jsonify({"message":"warranty_months id a required field."}),400
-
     try:
+        post_data = request.form if request.form else request.get_json()
+
+        warranty_months = post_data.get('warranty_months')
+        product_id = post_data.get('product_id')
+
+        if not warranty_months:
+            return jsonify({"message":"warranty_months id a required field."}),409
+
         cursor.execute(""" 
             INSERT INTO Warranties (warranty_months, product_id)
             VALUES (%s, %s)
-        """,(warranty_months, product_id) )
+        """,(warranty_months, product_id))
         conn.commit()
 
-    except:
-        cursor.rollback()
-        return jsonify({"message":"Warranty can not be added."}),400
+        return jsonify({"messege":"Warranty has been added to warranties table."}),201
 
-    return ({"messege": f 'Warranty has been added to warranties table.'}),201
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": "Warranty cannot be added.", "error": str(e)}), 500
+
     
-
-@app.route('/category', methods=['POST'])
-def create_category ():
-    post_data = request.form if request.form else request.get_json()
-
-    category_name = post_data.get('category_name')
-
-    if not category_name:
-        return jsonify({"message": "Category name is a required field."}),400
-
-    result = cursor.execute(""" 
-        SELECT * FROM Categories WHERE category_name=%s
-    """,[category_name])
-
-    result = cursor.fetchone()
-
-    if result:
-        return jsonify({"message": f"{category_name} is already exists."}),400
-
-    try:
-        cursor.execute(""" 
-            INSERT INTO Categories (category_name)
-            VALUES (%s)
-        """,(category_name) )
-        conn.commit()
-
-    except:
-        cursor.rollback()
-        return jsonify({"message": "Category cant be added."}),400    
-    return jsonify({"messege": f '{category_name} has been added to categories table.'}),201
-
 
 @app.route('/product/category', methods=['POST'])
 def create_pcx ():
-    post_data = request.form if request.form else request.get_json()
-
-    product_id = post_data.get('product_id')
-    category_id = post_data.get('category_id')
-
     try:
+        post_data = request.form if request.form else request.get_json()
+
+        product_id = post_data.get('product_id')
+        category_id = post_data.get('category_id')
+
+        if not product_id or not category_id:
+            return jsonify({"message": "Both product_id and category_id are required."}), 400
+
         cursor.execute(""" 
             INSERT INTO ProductsCategoriesXref (product_id, category_id)
             VALUES (%s, %s)
-        """,(product_id, category_id) )
+        """,(product_id, category_id))
         conn.commit()
 
-    except:
-         cursor.rollback()
-        return jsonify({"message": "New association between a product and category cant be added."}),400
-    return ({"messege": f' ProductsCategoriesXref has been updated.'}),201
+        return ({"messege": f' ProductsCategoriesXref has been updated.'}),201
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": "New association between a product and category cannot be added.", 
+                        "error": str(e)}), 500
 
 # read ================
 
@@ -169,7 +178,7 @@ def get_all_companies ():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"Companies table is empty"}),404
+            return jsonify({"message":"Companies table is empty"}),200
 
         companies_list =[]
        
@@ -186,37 +195,6 @@ def get_all_companies ():
         return jsonify({"message": "Companies cannot be displayed", "error":str(e)}),500
      
 
-
-@app.route('/products', methods=['GET'])
-def get_all_products ():
-    try:
-        cursor.execute(""" 
-        SELECT * FROM Products;
-        """)
-        results = cursor.fetchall()
-
-        if not results:
-            return jsonify({"message":"Products table is empty"}),404
-
-        product_list =[]
-       
-        for result in results:
-            product ={
-                'product_id' : result[0],
-                'company_id' : result[1],
-                'product_name' : result[2],
-                'price': result[3],
-                'description' : result[4],
-                'active':result[5]
-            }
-            product_list.append(product)
-
-        return jsonify({"messsage": "products found","results": product_list}),200
-    
-    except Exception as e:
-        return jsonify({"message": "Products cant be display", "error":str(e)}),500
-        
-
 @app.route('/categories', methods=['GET'])
 def get_all_categories ():
     try:
@@ -226,7 +204,7 @@ def get_all_categories ():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"Categories table is empty"}),400
+            return jsonify({"message":"Categories table is empty"}),200
 
         category_list =[]
        
@@ -237,7 +215,7 @@ def get_all_categories ():
             }
             category_list.append(category)
 
-        return jsonify({"message": "category found","results": category_list}),200
+        return jsonify({"message": "categories found","results": category_list}),200
     
     except Exception as e:
         return jsonify({"message": "Categories cant be display", "error":str(e)}),500
@@ -264,7 +242,7 @@ def get_all_products():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message": "Products table is empty"}), 400
+            return jsonify({"message": "Products table is empty"}), 200
 
         product_dict = {}
         for row in results:
@@ -301,12 +279,12 @@ def get_all_products():
 def get_active_products ():
     try:
         cursor.execute(""" 
-        SELECT * FROM Products WHERE active =%s;
-        """,[bool(active)])
+        SELECT * FROM Products WHERE active =TRUE;
+        """)
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"No active products found"}),404
+            return jsonify({"message":"No active products found", "results":[]}),402
 
         product_list =[]
        
@@ -333,16 +311,22 @@ def get_company_by_id (company_id):
     try:
         cursor.execute(""" 
         SELECT * FROM Companies WHERE company_id=%s
-        """,[company_id])
+        """,(company_id,)
+        )
         result = cursor.fetchone()
 
         if not result:
             return jsonify({"message":"Company does not exist"}),404
 
-        return jsonify({"message": "Company found","result": result}),200
+        company = {
+            "company_id": result[0],
+            "company_name": result[1]
+        }
+
+        return jsonify({"message": "Company found","result": company}),200
     
     except Exception as e:
-        return jsonify({"message": "Company cannot be displayed", "error":str(e)}),500
+        return jsonify({"message": "Company cannot be displayed", "error": str(e)}),500
      
 
 @app.route('/category/<category_id>', methods=['GET'])
@@ -350,7 +334,7 @@ def get_category_by_id(category_id):
     try:
         cursor.execute(""" 
         SELECT * FROM Categories WHERE category_id = %s
-        """, [category_id])
+        """, (category_id,))
         result = cursor.fetchone()
 
         if not result:
@@ -385,12 +369,11 @@ def get_product_by_id(product_id):
             WHERE p.product_id = %s;
         """, [product_id])
 
-        results = cursor.fetchone()
+        results = cursor.fetchall()  
 
         if not results:
-            return jsonify({"message": "Product does not exist"}), 404
+            return jsonify({"message": "Product does not exist", "result": {}}), 404
 
-      
         product = {
             "product_id": results[0][0],
             "product_name": results[0][1],
@@ -401,15 +384,15 @@ def get_product_by_id(product_id):
         }
 
         for row in results:
-            if row[6] and row[7]:
+            if row[5] and row[6]: 
                 category = {
-                    "category_id": row[6],
-                    "category_name": row[7]
+                    "category_id": row[5],
+                    "category_name": row[6]
                 }
                 if category not in product["categories"]:
                     product["categories"].append(category)
 
-        return jsonify({"message": "Product found", "results": product}), 200
+        return jsonify({"message": "Product retrieved successfully", "result": product}), 200
 
     except Exception as e:
         return jsonify({"message": "Product cannot be displayed", "error": str(e)}), 500
@@ -432,7 +415,7 @@ def get_warranty_by_id(warranty_id):
             "warranty_months": result[2]
         }
 
-        return jsonify({"message": "Warranty found", "results": Warranty}), 200
+        return jsonify({"message": "Warranty found", "results": warranty}), 200
     
     except Exception as e:
         return jsonify({"message": "Warranty cannot be displayed", "error": str(e)}), 500
@@ -451,7 +434,7 @@ def get_products_by_company (company_id):
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"No products found for this company"}),404
+            return jsonify({"message":"No products found for this company"}),200
 
         product_list =[]
        
