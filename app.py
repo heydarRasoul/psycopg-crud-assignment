@@ -16,66 +16,72 @@ app = Flask(__name__)
 create_all_tables()
 
 # create============
-
 @app.route('/company', methods=["POST"])
-def add_company ():
+def add_company():
     try:
         post_data = request.form if request.form else request.get_json()
-
         company_name = post_data.get('company_name')
 
         if not company_name:
             return jsonify({"message": "company_name is required."}), 400
 
-        result = cursor.execute("""
-            SELECT * FROM Companies WHERE company_name = %s
-        """,(company_name,))
-
-        result = cursor.fetchone()
-
-        if result:
-            return jsonify({"message":f"{company_name} is already exists."}),409
-
-        cursor.execute(""" 
+        cursor.execute(
+            """
             INSERT INTO Companies (company_name)
             VALUES (%s)
-        """,(company_name,))
+            RETURNING company_id, company_name
+            """,
+            (company_name,)
+        )
+
+        new_company = cursor.fetchone()
         conn.commit()
 
-        return jsonify({"messege": f'{company_name} has been added to companies table.'}),201
+        if new_company:
+            return jsonify({
+                "message": f"{company_name} has been added.",
+                "company": {
+                    "company_id": new_company[0],
+                    "company_name": new_company[1]
+                }
+            }), 201
+        else:
+            return jsonify({"message": f"{company_name} already exists."}), 409
 
     except Exception as e:
         conn.rollback()
         return jsonify({"message": "Company cannot be added.", "error": str(e)}), 500
 
-
-
 @app.route('/category', methods=['POST'])
-def create_category ():
+def create_category():
     try:
         post_data = request.form if request.form else request.get_json()
-
         category_name = post_data.get('category_name')
 
         if not category_name:
-            return jsonify({"message": "Category name is a required field."}),400
+            return jsonify({"message": "category_name is a required field."}), 400
 
-        result = cursor.execute(""" 
-            SELECT * FROM Categories WHERE category_name=%s
-        """,(category_name,))
-
+        cursor.execute("SELECT * FROM Categories WHERE category_name = %s", (category_name,))
         result = cursor.fetchone()
-
         if result:
-            return jsonify({"message": f"{category_name} is already exists."}),409
+            return jsonify({"message": f"{category_name} already exists."}), 409
 
-        cursor.execute(""" 
-            INSERT INTO Categories (category_name)
-            VALUES (%s)
-        """,(category_name,))
+        cursor.execute(
+            "INSERT INTO Categories (category_name) VALUES (%s) RETURNING category_id, category_name",
+            (category_name,)
+        )
+        new_category = cursor.fetchone()  
         conn.commit()
 
-        return jsonify({"messege": f'{category_name} has been added to categories table.'}),201
+        category_dict = {
+            "category_id": new_category[0],
+            "category_name": new_category[1]
+        }
+
+        return jsonify({
+            "message": f"{category_name} has been added to categories table.",
+            "category": category_dict
+        }), 201
 
     except Exception as e:
         conn.rollback()
@@ -83,7 +89,7 @@ def create_category ():
 
 
 @app.route('/product', methods=['POST'])
-def add_product ():
+def add_product():
     try:
         post_data = request.form if request.form else request.get_json()
 
@@ -94,58 +100,84 @@ def add_product ():
         active = post_data.get('active')
 
         if not product_name:
-            return jsonify({"message": "product_name is a requiered field"}), 400
+            return jsonify({"message": "product_name is a required field"}), 400
 
-        result = cursor.execute(""" 
-        SELECT * FROM Products WHERE product_name = %s 
-        """, (product_name,))
+        cursor.execute("SELECT * FROM Products WHERE product_name = %s", (product_name,))
         result = cursor.fetchone()
-
         if result:
-            return jsonify({"message": f"The {product_name} is already exists."}), 409
+            return jsonify({"message": f"The {product_name} already exists."}), 409
 
-
-        cursor.execute(""" 
+        cursor.execute(
+            """
             INSERT INTO Products (product_name, company_id, price, description, active)
-            VALUES (%s, %s ,%s, %s,%s)
-        """,(product_name, company_id, price, description, active) )
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING product_id, company_id, product_name, price, description, active
+            """,
+            (product_name, company_id, price, description, active)
+        )
+        new_product = cursor.fetchone()  
         conn.commit()
 
-        return ({"messege": f'{product_name} has been added to products table.'}), 201
+        product_dict = {
+            "product_id": new_product[0],
+            "company_id": new_product[1],
+            "product_name": new_product[2],
+            "price": new_product[3],
+            "description": new_product[4],
+            "active": new_product[5]
+        }
+
+        return jsonify({
+            "message": f"{product_name} has been added to products table.",
+            "product": product_dict
+        }), 201
 
     except Exception as e:
         conn.rollback()
         return jsonify({"message": "Product could not be added.", "error": str(e)}), 500
 
 
-
 @app.route('/warranty', methods=['POST'])
-def create_warranty ():
+def create_warranty():
     try:
         post_data = request.form if request.form else request.get_json()
-
         warranty_months = post_data.get('warranty_months')
         product_id = post_data.get('product_id')
 
         if not warranty_months:
-            return jsonify({"message":"warranty_months id a required field."}),409
+            return jsonify({"message": "warranty_months is a required field."}), 400
 
-        cursor.execute(""" 
+        cursor.execute(
+            """
             INSERT INTO Warranties (warranty_months, product_id)
             VALUES (%s, %s)
-        """,(warranty_months, product_id))
+            RETURNING warranty_id, product_id, warranty_months
+            """,
+            (warranty_months, product_id)
+        )
+        new_warranty = cursor.fetchone() 
         conn.commit()
 
-        return jsonify({"messege":"Warranty has been added to warranties table."}),201
+        warranty_dict = {
+            "warranty_id": new_warranty[0],
+            "product_id": new_warranty[1],
+            "warranty_months": new_warranty[2]
+        }
+
+        return jsonify({
+            "message": "Warranty has been added to warranties table.",
+            "warranty": warranty_dict
+        }), 201
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Warranty cannot be added.", "error": str(e)}), 500
+        return jsonify({"message": "Warranty cannot be added .", "error": str(e)}), 500
 
-    
+
+
 
 @app.route('/product/category', methods=['POST'])
-def create_pcx ():
+def create_pcx():
     try:
         post_data = request.form if request.form else request.get_json()
 
@@ -155,17 +187,33 @@ def create_pcx ():
         if not product_id or not category_id:
             return jsonify({"message": "Both product_id and category_id are required."}), 400
 
-        cursor.execute(""" 
+        cursor.execute(
+            """
             INSERT INTO ProductsCategoriesXref (product_id, category_id)
             VALUES (%s, %s)
-        """,(product_id, category_id))
+            RETURNING product_id, category_id
+            """,
+            (product_id, category_id)
+        )
+        new_pcx = cursor.fetchone() 
         conn.commit()
 
-        return ({"messege": f' ProductsCategoriesXref has been updated.'}),201
+        pcx_dict = {
+            "product_id": new_pcx[0],
+            "category_id": new_pcx[1]
+        }
+
+        return jsonify({
+            "message": "ProductsCategoriesXref has been updated.",
+            "pcx": pcx_dict
+        }), 201
+
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "New association between a product and category cannot be added.", 
-                        "error": str(e)}), 500
+        return jsonify({
+            "message": "New association between a product and category cannot be added.",
+            "error": str(e)
+        }), 500
 
 # read ================
 
@@ -178,7 +226,7 @@ def get_all_companies ():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"Companies table is empty"}),200
+            return jsonify({"message":"companies table is empty"}),200
 
         companies_list =[]
        
@@ -189,10 +237,10 @@ def get_all_companies ():
             }
             companies_list.append(company)
 
-        return jsonify({"message": "Companies found","results": companies_list}),200
+        return jsonify({"message": "companies found","results": companies_list}),200
     
     except Exception as e:
-        return jsonify({"message": "Companies cannot be displayed", "error":str(e)}),500
+        return jsonify({"message": "companies cannot be displayed", "error":str(e)}),500
      
 
 @app.route('/categories', methods=['GET'])
@@ -204,7 +252,7 @@ def get_all_categories ():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"Categories table is empty"}),200
+            return jsonify({"message":"categories table is empty"}),200
 
         category_list =[]
        
@@ -218,7 +266,7 @@ def get_all_categories ():
         return jsonify({"message": "categories found","results": category_list}),200
     
     except Exception as e:
-        return jsonify({"message": "Categories cant be display", "error":str(e)}),500
+        return jsonify({"message": "categories cant be display", "error":str(e)}),500
         
 
 @app.route('/products', methods=['GET'])
@@ -242,7 +290,7 @@ def get_all_products():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message": "Products table is empty"}), 200
+            return jsonify({"message": "products table is empty"}), 200
 
         product_dict = {}
         for row in results:
@@ -271,7 +319,7 @@ def get_all_products():
         return jsonify({"message": "products found", "results": product_list}), 200
 
     except Exception as e:
-        return jsonify({"message": "Products can't be displayed", "error": str(e)}), 500
+        return jsonify({"message": "products can't be displayed", "error": str(e)}), 500
 
 
 
@@ -284,7 +332,7 @@ def get_active_products ():
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"No active products found", "results":[]}),402
+            return jsonify({"message":"no active products found", "results":[]}),402
 
         product_list =[]
        
@@ -299,10 +347,10 @@ def get_active_products ():
             }
             product_list.append(product)
 
-        return jsonify({"message": "Active products found","results": product_list}),200
+        return jsonify({"message": "active products found","results": product_list}),200
     
     except Exception as e:
-        return jsonify({"message": "Active products cannot be displayed", "error":str(e)}),500
+        return jsonify({"message": "active products cannot be displayed", "error":str(e)}),500
         
 
 
@@ -316,17 +364,17 @@ def get_company_by_id (company_id):
         result = cursor.fetchone()
 
         if not result:
-            return jsonify({"message":"Company does not exist"}),404
+            return jsonify({"message":"company does not exist"}),404
 
         company = {
             "company_id": result[0],
             "company_name": result[1]
         }
 
-        return jsonify({"message": "Company found","result": company}),200
+        return jsonify({"message": "company found","result": company}),200
     
     except Exception as e:
-        return jsonify({"message": "Company cannot be displayed", "error": str(e)}),500
+        return jsonify({"message": "company cannot be displayed", "error": str(e)}),500
      
 
 @app.route('/category/<category_id>', methods=['GET'])
@@ -338,17 +386,17 @@ def get_category_by_id(category_id):
         result = cursor.fetchone()
 
         if not result:
-            return jsonify({"message": "Category does not exist"}), 404
+            return jsonify({"message": "category does not exist"}), 404
 
         category = {
             "category_id": result[0],
             "category_name": result[1]
         }
 
-        return jsonify({"message": "Category found", "results": category}), 200
+        return jsonify({"message": "category found", "results": category}), 200
     
     except Exception as e:
-        return jsonify({"message": "Category cannot be displayed", "error": str(e)}), 500
+        return jsonify({"message": "category cannot be displayed", "error": str(e)}), 500
 
 
 @app.route('/product/<product_id>', methods=['GET'])
@@ -372,7 +420,7 @@ def get_product_by_id(product_id):
         results = cursor.fetchall()  
 
         if not results:
-            return jsonify({"message": "Product does not exist", "result": {}}), 404
+            return jsonify({"message": "product does not exist", "result": {}}), 404
 
         product = {
             "product_id": results[0][0],
@@ -392,10 +440,10 @@ def get_product_by_id(product_id):
                 if category not in product["categories"]:
                     product["categories"].append(category)
 
-        return jsonify({"message": "Product retrieved successfully", "result": product}), 200
+        return jsonify({"message": "product retrieved successfully", "result": product}), 200
 
     except Exception as e:
-        return jsonify({"message": "Product cannot be displayed", "error": str(e)}), 500
+        return jsonify({"message": "product cannot be displayed", "error": str(e)}), 500
 
 
 @app.route('/warranty/<warranty_id>', methods=['GET'])
@@ -407,7 +455,7 @@ def get_warranty_by_id(warranty_id):
         result = cursor.fetchone()
 
         if not result:
-            return jsonify({"message": "Warranty does not exist"}), 404
+            return jsonify({"message": "warranty does not exist"}), 404
 
         warranty = {
             "warranty_id": result[0],
@@ -415,10 +463,10 @@ def get_warranty_by_id(warranty_id):
             "warranty_months": result[2]
         }
 
-        return jsonify({"message": "Warranty found", "results": warranty}), 200
+        return jsonify({"message": "warranty found", "results": warranty}), 200
     
     except Exception as e:
-        return jsonify({"message": "Warranty cannot be displayed", "error": str(e)}), 500
+        return jsonify({"message": "warranty cannot be displayed", "error": str(e)}), 500
 
 
 @app.route('/product/company/<company_id>', methods=['GET'])
@@ -434,7 +482,7 @@ def get_products_by_company (company_id):
         results = cursor.fetchall()
 
         if not results:
-            return jsonify({"message":"No products found for this company"}),200
+            return jsonify({"message":"no products found for this company"}),200
 
         product_list =[]
        
@@ -450,10 +498,10 @@ def get_products_by_company (company_id):
             }
             product_list.append(product)
 
-        return jsonify({"message": "Products found","results": product_list}),200
+        return jsonify({"message": "products found","results": product_list}),200
     
     except Exception as e:
-        return jsonify({"message": "Products cannot be displayed", "error":str(e)}),500
+        return jsonify({"message": "products cannot be displayed", "error":str(e)}),500
         
 
 # UPDATE==============
@@ -474,17 +522,17 @@ def update_company_by_id (company_id):
 
         updated = cursor.fetchone()
         if not updated:
-            return jsonify({"message": "Company not found"}), 404
+            return jsonify({"message": "company not found"}), 404
 
         conn.commit()
-        return jsonify({"message": "Company updated successfully", "results": {
+        return jsonify({"message": "company updated successfully", "results": {
             "company_id": updated[0],
             "company_name": updated[1]
         }}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Company cannot be updated", "error": str(e)}), 500
+        return jsonify({"message": "company cannot be updated", "error": str(e)}), 500
 
 
 @app.route('/category/<category_id>', methods=['PUT'])
@@ -505,14 +553,14 @@ def update_category_by_id(category_id):
 
         updated = cursor.fetchone()
         if not updated:
-            return jsonify({"message": "Category not found"}), 404
+            return jsonify({"message": "category not found"}), 404
 
         conn.commit()
-        return jsonify({"message": "Category updated successfully"}), 200
+        return jsonify({"message": "category updated successfully"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Category cannot be updated", "error": str(e)}), 500
+        return jsonify({"message": "category cannot be updated", "error": str(e)}), 500
 
 
 @app.route('/product/<product_id>', methods=['PUT'])
@@ -546,7 +594,7 @@ def update_product_by_id(product_id):
             values.append(active)
 
         if not fields:
-            return jsonify({"message": "No fields to update"}), 400
+            return jsonify({"message": "no fields to update"}), 400
 
         values.append(product_id)
 
@@ -555,7 +603,7 @@ def update_product_by_id(product_id):
         updated = cursor.fetchone()
 
         if not updated:
-            return jsonify({"message": "Product not found"}), 404
+            return jsonify({"message": "product not found"}), 404
 
         conn.commit()
 
@@ -568,11 +616,11 @@ def update_product_by_id(product_id):
             "active": updated[5]
         }
 
-        return jsonify({"message": "Product updated successfully", "results": product}), 200
+        return jsonify({"message": "product updated successfully", "results": product}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Product cannot be updated", "error": str(e)}), 500
+        return jsonify({"message": "product cannot be updated", "error": str(e)}), 500
 
 
 @app.route('/warranty/<warranty_id>', methods=['PUT'])
@@ -594,7 +642,7 @@ def update_warranty_by_id(warranty_id):
             values.append(warranty_months)
 
         if not fields:
-            return jsonify({"message": "No fields to update"}), 400
+            return jsonify({"message": "no fields to update"}), 400
 
         values.append(warranty_id)
 
@@ -603,7 +651,7 @@ def update_warranty_by_id(warranty_id):
         updated = cursor.fetchone()
 
         if not updated:
-            return jsonify({"message": "Warranty not found"}), 404
+            return jsonify({"message": "warranty not found"}), 404
 
         conn.commit()
 
@@ -613,11 +661,11 @@ def update_warranty_by_id(warranty_id):
             "warranty_months": updated[2]
         }
 
-        return jsonify({"message": "Warranty updated successfully", "results": warranty}), 200
+        return jsonify({"message": "warranty updated successfully", "results": warranty}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Warranty cannot be updated", "error": str(e)}), 500
+        return jsonify({"message": "warranty cannot be updated", "error": str(e)}), 500
 
 
 # DELETE===============
@@ -631,14 +679,14 @@ def delete_company(company_id):
         """, [company_id])
 
         if cursor.rowcount == 0:
-            return jsonify({"message": "Company not found"}), 404
+            return jsonify({"message": "company not found"}), 404
 
         conn.commit()
-        return jsonify({"message": "Company and all related products deleted successfully"}), 200
+        return jsonify({"message": "company and all related products deleted successfully"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Company cannot be deleted", "error": str(e)}), 500
+        return jsonify({"message": "company cannot be deleted", "error": str(e)}), 500
 
 
 @app.route('/product/delete/<product_id>', methods=['DELETE'])
@@ -650,13 +698,13 @@ def delete_product(product_id):
         """,[product_id])
 
         if cursor.rowcount == 0:
-            return jsonify({"message": "Product not found"}), 404
+            return jsonify({"message": "product not found"}), 404
 
         conn.commit()
-        return jsonify({"message": "Product and all related warranty records deleted successfully"}), 200
+        return jsonify({"message": "product and all related warranty records deleted successfully"}), 200
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Product cannot be deleted", "error": str(e)}), 500
+        return jsonify({"message": "product cannot be deleted", "error": str(e)}), 500
 
 
 @app.route('/category/delete/<category_id>', methods=['DELETE'])
@@ -668,14 +716,14 @@ def delete_category(category_id):
         """, [category_id])
 
         if cursor.rowcount == 0:
-            return jsonify({"message": "Category not found"}), 404
+            return jsonify({"message": "category not found"}), 404
 
         conn.commit()
-        return jsonify({"message": "Category and all related xref records deleted successfully"}), 200
+        return jsonify({"message": "category and all related xref records deleted successfully"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Category cannot be deleted", "error": str(e)}), 500
+        return jsonify({"message": "category cannot be deleted", "error": str(e)}), 500
 
 
 @app.route('/warranty/delete/<warranty_id>', methods=['DELETE'])
@@ -687,14 +735,14 @@ def delete_warranty(warranty_id):
         """, [warranty_id])
 
         if cursor.rowcount == 0:
-            return jsonify({"message": "Warranty not found"}), 404
+            return jsonify({"message": "warranty not found"}), 404
 
         conn.commit()
-        return jsonify({"message": "Warranty deleted successfully"}), 200
+        return jsonify({"message": "warranty deleted successfully"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": "Warranty cannot be deleted", "error": str(e)}), 500
+        return jsonify({"message": "warranty cannot be deleted", "error": str(e)}), 500
 
 
 if __name__ == '__main__':
